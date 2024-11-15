@@ -2,45 +2,16 @@ const std = @import("std");
 
 const DATA_ARRAY_SIZE: usize = 30000;
 
-fn MakeBracketStack(comptime size: usize) type {
-    return struct {
-        var index: usize = 0;
-        // var items: [size]u8 = [_]u8{0} ** size;
-        var items: [size]u8 = undefined;
-
-        fn push(char: u8) void {
-            const Self = @This();
-            Self.items[Self.index] = char;
-            Self.index += 1;
-        }
-
-        fn pop() void {
-            const Self = @This();
-            Self.index -= 1;
-            Self.items[Self.index] = 0;
-        }
-
-        // look at items backward
-        fn peek() u8 {
-            const Self = @This();
-            return Self.items[Self.index - 1];
-        }
-
-        fn len() usize {
-            const Self = @This();
-            return Self.items.len;
-        }
-    };
-}
-
 const BrainfuckMachine = struct {
     ip: usize = 0, // instruction pointer
     dp: usize = 0, // data pointer
     data_array: [DATA_ARRAY_SIZE]u8 = [_]u8{0} ** DATA_ARRAY_SIZE,
+    debug: bool = false,
+    // var open_brackets_count: u32 = 0;
 
-    fn run(Self: *BrainfuckMachine, code: []const u8) void {
+    fn run(Self: *BrainfuckMachine, code: []const u8) !void {
         while (Self.*.ip < code.len) {
-            var char = code[Self.*.ip];
+            const char = code[Self.*.ip];
             switch (char) {
                 '>' => {
                     Self.*.dp += 1;
@@ -49,8 +20,6 @@ const BrainfuckMachine = struct {
                     Self.*.dp -= 1;
                 },
                 '+' => {
-                    // const data = Self.*.data_array[Self.*.dp];
-                    // std.debug.print("-> ip {}/{} -> {}\n", .{ Self.*.ip, code.len, data });
                     Self.*.data_array[Self.*.dp] += 0x1;
                 },
 
@@ -60,115 +29,105 @@ const BrainfuckMachine = struct {
 
                 '.' => {
                     const byte = Self.*.data_array[Self.*.dp];
-                    // std.debug.print("[BF] -> {c}\n", .{byte});
                     std.debug.print("{c}", .{byte});
                 },
 
                 ',' => {
-                    // TODO: accept a byte of input
-                    @panic("Doesn't support user input yet");
+                    const stdin = std.io.getStdIn().reader();
+                    Self.*.data_array[Self.*.dp] = stdin.readByte() catch unreachable;
                 },
 
                 '[' => {
-                    const stack = MakeBracketStack(1000);
-                    // std.debug.print("items size = {} \n", .{stack.items.len});
-                    // if (true) break;
-                    // push stack
-
-                    // std.debug.print("opened\n", .{});
+                    var open_brackets_count: u32 = 1;
                     const byte = Self.*.data_array[Self.*.dp];
                     if (byte == 0x0) {
-                        stack.push('[');
-                        const currIndex = stack.index - 1;
-                        // std.debug.print("byte value {} \n", .{byte});
-
-                        // TODO: jump forward to after the next matching ']'
-                        while (Self.*.ip < code.len) {
+                        while (open_brackets_count != 0) {
                             Self.*.ip += 1;
-                            char = code[Self.*.ip];
-
-                            if (char == '[') stack.push(char);
-                            if (char == ']') {
-                                if (stack.peek() == '[') {
-                                    stack.pop();
-                                } else stack.push(']');
-
-                                if (currIndex == stack.index) break;
+                            const _char = code[Self.*.ip];
+                            switch (_char) {
+                                '[' => {
+                                    open_brackets_count += 1;
+                                },
+                                ']' => {
+                                    open_brackets_count -= 1;
+                                },
+                                else => {}, // noop
                             }
-                        }
-                        // Self.*.ip += 1;
 
-                        // stack.pop();
+                            // std.debug.print("[Loop / I -> {any} | Data -> {any}@{any}\n", .{ Self.*.ip, Self.*.data_array[Self.*.dp], Self.*.dp });
+                        }
                     }
                 },
 
                 ']' => {
-                    const substack = MakeBracketStack(1000);
-
-                    // std.debug.print("closed\n", .{});
+                    // std.debug.print("Get's here 1\n", .{});
+                    var closed_brackets_count: u32 = 1;
                     const byte = Self.*.data_array[Self.*.dp];
+
                     if (byte != 0x0) {
-                        substack.push(']');
-                        const currIndex = substack.index - 1;
-
-                        // TODO: jump forward to after the next matching '['
-                        while (Self.*.ip > 0) {
+                        while (closed_brackets_count != 0) {
                             Self.*.ip -= 1;
-                            char = code[Self.*.ip];
-
-                            if (char == ']') substack.push(char);
-                            if (char == '[') {
-                                if (substack.peek() == ']') {
-                                    substack.pop();
-                                } else substack.push('[');
-
-                                if (currIndex == substack.index) break;
+                            const _char = code[Self.*.ip];
+                            switch (_char) {
+                                '[' => {
+                                    closed_brackets_count -= 1;
+                                },
+                                ']' => {
+                                    closed_brackets_count += 1;
+                                },
+                                else => {},
                             }
-                        }
 
-                        // Self.*.ip -= 1;
-                        // stack.pop();
-                        // ckehar = code[Self.*.ip];
-                        continue;
-                        // ++++[>---3232]+++
+                            // std.debug.print("]Loop / I -> {any} | Data -> {any}@{any}\n", .{ Self.*.ip, Self.*.data_array[Self.*.dp], Self.*.dp });
+                        }
                     }
+                    // Self.*.ip += 1;
                 },
                 else => {},
             }
-
+            // std.debug.print("I -> {any} | Data -> {any}@{any}\n", .{ Self.*.ip, Self.*.data_array[Self.*.dp], Self.*.dp });
             // go to the next instruction
             Self.*.ip += 1;
         }
     }
+
+    fn read_input() void {
+        std.io.getStdIn().reader();
+    }
+
+    fn inspect_internals(Self: *BrainfuckMachine, code: []const u8) void {
+        std.debug.print("{s}\n", .{code});
+        std.debug.print("{s}^\n", .{" " * Self.*.ip});
+    }
 };
 
-pub fn main() void {
+pub fn main() !void {
     var machine = BrainfuckMachine{};
     // const test_str = "++ > +++++ [ <+ >- ] ++++ ++++ [ <+++ +++ >- ] < .";
     // Hello World
     // const test_str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
-    // squares
-    // const test_str = ">>>>>>>>>>+>++<[ [[<<+>+>-]++++++[<++++++++>-]<-.[-]<<<] ++++++++++.[-]>>>>>[>>>>]<<<<[[<<<+>+>>-]<<<-<]>>++[ [ <<<++++++++++[>>>[->>+<]>[<]<<<<-] >>>[>>[-]>>+<<<<[>>+<<-]]>>>> ]<<-[+>>>>]+[<<<<]> ]>>>[>>>>]<<<<-<<+<< ]";
-    // const test_str = ">>>++[ <++++++++[ <[<++>-]>>[>>]+>>+[ -[->>+<<<[<[<<]<+>]>[>[>>]]] <[>>[-]]>[>[-<<]>[<+<]]+<< ]<[>+<-]>>- ]<.[-]>> ]";
-    const test_str = ">>++++++[>++++++++<-]+[[>.[>]+<<[->-<<<]>[>+<<]>]>++<++]";
-    // const test_str = ">++++++++++[<++++++++++>-]<->>>>>+++[>+++>+++<<-]<<<<+<[>[>+ >+<<-]>>[-<<+>>]++++>+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]<<[[-]>> >>>>[[-]<++++++++++<->>]<-[>+>+<<-]>[<+>-]+>[[-]<->]<<<<<<<< <->>]<[>+>+<<-]>>[-<<+>>]+>+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]<< <[>>+>+<<<-]>>>[-<<<+>>>]++>+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]< <[>+<[-]]<[>>+<<[-]]>>[<<+>>[-]]<<<[>>+>+<<<-]>>>[-<<<+>>>]+ +++>+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]<<[>+<[-]]<[>>+<<[-]]>>[< <+>>[-]]<<[[-]>>>++++++++[>>++++++<<-]>[<++++++++[>++++++<-] >.<++++++++[>------<-]>[<<+>>-]]>.<<++++++++[>>------<<-]<[- >>+<<]<++++++++[<++++>-]<.>+++++++[>+++++++++<-]>+++.<+++++[ >+++++++++<-]>.+++++..--------.-------.++++++++++++++>>[>>>+ >+<<<<-]>>>>[-<<<<+>>>>]>+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]<<<< [>>>+>+<<<<-]>>>>[-<<<<+>>>>]+>+<[-<->]<[[-]>>-<<]>>[[-]<<+> >]<<<[>>+<<[-]]>[>+<[-]]++>>+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]< +<[[-]>-<]>[<<<<<<<.>>>>>>>[-]]<<<<<<<<<.>>----.---------.<< .>>----.+++..+++++++++++++.[-]<<[-]]<[>+>+<<-]>>[-<<+>>]+>+< [-<->]<[[-]>>-<<]>>[[-]<<+>>]<<<[>>+>+<<<-]>>>[-<<<+>>>]++++ >+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]<<[>+<[-]]<[>>+<<[-]]>>[<<+> >[-]]<<[[-]>++++++++[<++++>-]<.>++++++++++[>+++++++++++<-]>+ .-.<<.>>++++++.------------.---.<<.>++++++[>+++<-]>.<++++++[ >----<-]>++.+++++++++++..[-]<<[-]++++++++++.[-]]<[>+>+<<-]>> [-<<+>>]+++>+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]<<[[-]++++++++++. >+++++++++[>+++++++++<-]>+++.+++++++++++++.++++++++++.------ .<++++++++[>>++++<<-]>>.<++++++++++.-.---------.>.<-.+++++++ ++++.++++++++.---------.>.<-------------.+++++++++++++.----- -----.>.<++++++++++++.---------------.<+++[>++++++<-]>..>.<- ---------.+++++++++++.>.<<+++[>------<-]>-.+++++++++++++++++ .---.++++++.-------.----------.[-]>[-]<<<.[-]]<[>+>+<<-]>>[- <<+>>]++++>+<[-<->]<[[-]>>-<<]>>[[-]<<+>>]<<[[-]++++++++++.[ -]<[-]>]<+<]";
+    // const test_str = "+++++[-]";
+    // print's the letter 'A' to the console
+    // const test_str = "----[---->+<]>++.";
+    // Add two numbers
+    // const test_str = "  ++ > +++++ [ <+ >- ] ++++ ++++ [ <+++ +++ >- ] < .";
+    // Generate random bytes
+    // const test_str = "  >>>++[ <++++++++[ <[<++>-]>>[>>]+>>+[ -[->>+<<<[<[<<]<+>]>[>[>>]]] <[>>[-]]>[>[-<<]>[<+<]]+<< ]<[>+<-]>>- ]<.[-]>> ]";
+    // Theumorse code generator
+    // const test_str = "  >>++++++[>++++++++<-]+[[>.[>]+<<[->-<<<]>[>+<<]>]>++<++]";
+    // Other hello world
+    // const test_str = "++++++++++[>+>+++>+++++++>++++++++++<<<<-]>>>++.>+.+++++++..+++.<<++++++++++++++.------------.>+++++++++++++++.>.+++.------.--------.<<+.";
+    // const test_str = "--[----->+<]>---.++++++++++++.+.+++++++++.+[-->+<]>+++.++[-->+++<]>.++++++++++++.+.+++++++++.-[-->+++++<]>++.[--->++<]>-.-----------.";
+    // Triangles
+    // const test_str = ">++++[<++++++++>-]>++++++++[>++++<-]>>++>>>+>>>+<<<<<<<<<<[-[->+<]>[-<+>>>.<<]>>>[[->++++++++[>++++<-]>.<<[->+<]+>[->++++++++++<<+>]>.[-]>]]+<<<[-[->+<]+>[-<+>>>-[->+<]++>[-<->]<<<]<<<<]++++++++++.+++.[-]<]+++++";
+    const test_str = ",.";
 
-    // const test_str = "++++[++++>---<]>-.---[----->+<]>-.+++[->+++<]>++.++++++++.+++++.";
-    // const test_str = "++++[++++>---<]>-.";
-    // const test_str = ">>++++++++++[[->+<<++++>]<++[<]>[.>]>.]";
-    // const test_str = "+[[->]-[-<]>-]>.>>>>.<<<<-.>>-.>.<<.>>>>-.<<<<<++.>>++.";
-    // [[[[]]]]
+    // [[[[]]]]-
     // popping an item on the stack leaves us with (index) number of items on the stack
     // ^ for matching square brackets
     // the matching opening/closing square bracket we should stop at is whichever
     // will pop the current opening or closing on the stack
 
-    machine.run(test_str);
+    machine.run(test_str) catch unreachable;
     // expected result: 7
 }
-
-//
-//
-// [
-// [
-//
